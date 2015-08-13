@@ -11,7 +11,10 @@
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
 #include <GL/glext.h>
+
+#define GLX_GLXEXT_PROTOTYPES
 #include <GL/glx.h>
+#include <GL/glxext.h>
 
 
 Display*   glx_display;
@@ -55,22 +58,31 @@ GLuint loadTex(const char* file)
 void* glinit(void* arg)
 {
 	printf("OpenGL init begin.\n");
-	typedef GLXContext (*FUNC_glXCreateContextAttribsARB)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
+	typedef GLXContext (*FUNC_glXCreateContextAttribsARB)(
+			Display* dpy, GLXFBConfig config, GLXContext share_context, Bool direct, const int* attrib_list );
 	FUNC_glXCreateContextAttribsARB glXCreateContextAttribsARB =
 		(FUNC_glXCreateContextAttribsARB)glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
-	if( !glXCreateContextAttribsARB ) printf("glXGetProcAddressARB() failed!\n");
+	if( !glXCreateContextAttribsARB ) printf("glXGetProcAddressARB() for \"glXCreateContextAttribsARB\" failed!\n");
 
 	glx_display = XOpenDisplay( NULL ); // connect to X11 server
 	if(!glx_display) printf("XOpenDisplay() failed!\n");
 
 	static int visualAttribs[] = { None };
-	int numberOfFramebufferConfigurations = 0;
-	GLXFBConfig* fbConfigs = glXChooseFBConfig( glx_display, DefaultScreen(glx_display), visualAttribs, &numberOfFramebufferConfigurations );
+	int numberOfFbConfigs = 0;
+	GLXFBConfig* fbConfigs = glXChooseFBConfig( glx_display, DefaultScreen(glx_display), visualAttribs, &numberOfFbConfigs );
 	if(!fbConfigs) printf("glXChooseFBConfig() failed!\n");
 
-	int context_attribs[] = { None };
-	glx_context = glXCreateContextAttribsARB( glx_display, fbConfigs[0], 0, True, context_attribs);
+	int context_attribs[] = {
+		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 0,
+		GLX_CONTEXT_FLAGS_ARB, 0, //GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+		GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+		None
+	};
+	glx_context = glXCreateContextAttribsARB( glx_display, fbConfigs[0], 0, True, context_attribs );
 	if( !glx_context ) printf("glXCreateContextAttribsARB failed!\n");
+
+	printf("glXIsDirect: %d\n", glXIsDirect(glx_display, glx_context));
 
 	int pbufferAttribs[] = {
 		GLX_PBUFFER_WIDTH,  1,
@@ -80,8 +92,8 @@ void* glinit(void* arg)
 	glx_pbuffer = glXCreatePbuffer( glx_display, fbConfigs[0], pbufferAttribs );
 
 	// clean up:
-	XFree( fbConfigs );
-	XSync( glx_display, False );
+	XFree( fbConfigs ); // Be sure to free the FBConfig list allocated by glXChooseFBConfig
+	XSync( glx_display, False ); // Sync to ensure any errors generated are processed.
 
 	// <draw> and <read> are both None and the OpenGL version supported by <ctx> is 3.0 or greater
 	// see, https://www.opengl.org/registry/specs/ARB/glx_create_context.txt
@@ -125,6 +137,13 @@ void* glinit(void* arg)
 	return 0;
 }
 
+void glclean()
+{
+	glXDestroyPbuffer(glx_display, glx_pbuffer);
+	glXDestroyContext(glx_display, glx_context);
+	XCloseDisplay(glx_display);
+}
+
 void* draw(void* arg)
 {
 	return 0;
@@ -149,6 +168,8 @@ int main()
 	pthread_create(&thread, NULL, process, NULL);
 	pthread_join(thread, NULL);
 	
+	glclean();
+
 	return 0;
 }
 
