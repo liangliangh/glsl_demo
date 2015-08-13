@@ -22,7 +22,7 @@ GLXContext glx_context;
 GLXPbuffer glx_pbuffer;
 
 GLuint    tex_circle, tex_site;
-const int width=640, height=480;
+const int width=1280, height=720;
 
 
 const char* glerrors(GLenum code){
@@ -172,12 +172,110 @@ void* glclean(void* arg)
 	XCloseDisplay(glx_display);
 }
 
+
+char* textFileRead(const char* fn)
+{
+    FILE *fp = fopen(fn,"rt");
+    if(!fp){
+    	printf("textFileRead(\"%s\") failed.\n", fn);
+    	return NULL;
+    }
+
+	fseek(fp, 0, SEEK_END);
+	int count = ftell(fp);
+	rewind(fp);
+
+	char *content = NULL;
+	if (count > 0) {
+		content = (char *)malloc(sizeof(char) * (count+1));
+		count = fread(content,sizeof(char),count,fp);
+		content[count] = '\0';
+	}
+	fclose(fp);
+
+    return content;
+}
+
+// http://www.lighthouse3d.com/tutorials/glsl-tutorial/
+void printShaderInfoLog(GLuint obj)
+{
+	GLint ret; glGetShaderiv(obj, GL_COMPILE_STATUS, &ret);
+	if(ret==GL_TRUE) printf("compile shader %d success.\n", obj);
+	else 			 printf("compile shader %d failed.\n", obj);
+
+    int infologLength = 0;
+    int charsWritten  = 0;
+    char *infoLog;
+    glGetShaderiv(obj, GL_INFO_LOG_LENGTH, &infologLength);
+    if (infologLength > 0) {
+        infoLog = (char*)malloc(infologLength);
+        glGetShaderInfoLog(obj, infologLength, &charsWritten, infoLog);
+        printf("compile log:\n%s\n",infoLog);
+        free(infoLog);
+    }
+}
+
+void printProgramInfoLog(GLuint obj)
+{
+	GLint ret; glGetProgramiv(obj, GL_LINK_STATUS, &ret);
+	if(ret==GL_TRUE) printf("link program %d success.\n", obj);
+	else 			 printf("link program %d failed.\n", obj);
+
+    int infologLength = 0;
+    int charsWritten  = 0;
+    char *infoLog;
+    glGetProgramiv(obj, GL_INFO_LOG_LENGTH, &infologLength);
+    if (infologLength > 0) {
+        infoLog = (char *)malloc(infologLength);
+        glGetProgramInfoLog(obj, infologLength, &charsWritten, infoLog);
+        printf("link log:\n%s\n",infoLog);
+        free(infoLog);
+    }
+}
+
+
+GLuint verts, frags, prog;
+
 void* glsetuppipeline(void* arg)
 {
 	if( !glXMakeContextCurrent(glx_display, glx_pbuffer, glx_pbuffer, glx_context) )
 		printf("glXMakeContextCurrent failed in glsetuppipeline().\n");
 
-	//
+	verts = glCreateShader(GL_VERTEX_SHADER);
+	frags = glCreateShader(GL_FRAGMENT_SHADER);
+	char* vss = textFileRead("vertex.glsl");
+	char* fss = textFileRead("fragment.glsl");
+	glShaderSource(verts, 1, &vss, NULL);
+	glShaderSource(frags, 1, &fss, NULL);
+	free(vss); vss=0;
+	free(fss); fss=0;
+
+	glCompileShader(verts); printShaderInfoLog(verts);
+	glCompileShader(frags); printShaderInfoLog(frags);
+
+	prog = glCreateProgram();
+	glAttachShader(prog, verts);
+	glAttachShader(prog, frags);
+
+	glLinkProgram(prog); printProgramInfoLog(prog);
+	glUseProgram(prog);
+
+	printf("OpenGL Error (after set up pipeline): %s\n", glerrors(glGetError()));
+
+	glXMakeContextCurrent( glx_display, None, None, NULL ); // release context
+
+	return 0;
+}
+
+void* glcleanpipeline(void* arg)
+{
+	if( !glXMakeContextCurrent(glx_display, glx_pbuffer, glx_pbuffer, glx_context) )
+		printf("glXMakeContextCurrent failed in glcleanpipeline().\n");
+
+	glUseProgram(0);
+	glDeleteProgram(prog);
+	glDeleteShader(verts);
+	glDeleteShader(frags);
 
 	glXMakeContextCurrent( glx_display, None, None, NULL ); // release context
 
@@ -216,10 +314,14 @@ void* draw(void* arg)
 void* process(void* arg)
 {
 	pthread_t thread;
+
 	pthread_create(&thread, NULL, glsetuppipeline, NULL);
 	pthread_join(thread, NULL);
 
 	pthread_create(&thread, NULL, draw, NULL);
+	pthread_join(thread, NULL);
+
+	pthread_create(&thread, NULL, glcleanpipeline, NULL);
 	pthread_join(thread, NULL);
 
 	return 0;
