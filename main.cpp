@@ -24,6 +24,28 @@ GLXPbuffer glx_pbuffer;
 GLuint    tex_circle, tex_site;
 const int width=640, height=480;
 
+
+const char* glerrors(GLenum code){
+	switch(code){
+		case GL_NO_ERROR:
+			return "GL_NO_ERROR";
+		case GL_INVALID_ENUM:
+			return "GL_INVALID_ENUM";
+		case GL_INVALID_VALUE:
+			return "GL_INVALID_VALUE";
+		case GL_INVALID_OPERATION:
+			return "GL_INVALID_OPERATION";
+		case GL_STACK_OVERFLOW:
+			return "GL_STACK_OVERFLOW";
+		case GL_STACK_UNDERFLOW:
+			return "GL_STACK_UNDERFLOW";
+		case GL_OUT_OF_MEMORY:
+			return "GL_OUT_OF_MEMORY";
+		default:
+			return "undefined error code";
+	}
+}
+
 GLuint loadTex(const char* file)
 {
 	GLuint tex;
@@ -48,9 +70,11 @@ GLuint loadTex(const char* file)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+//	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE); // not core profile
 
-	glEnable(GL_TEXTURE_2D);
+//	glEnable(GL_TEXTURE_2D);
+
+	printf("OpenGL Error (after loadtex): %s\n", glerrors(glGetError()));
 
 	return tex;
 }
@@ -59,7 +83,7 @@ void* glinit(void* arg)
 {
 	printf("OpenGL init begin.\n");
 	typedef GLXContext (*FUNC_glXCreateContextAttribsARB)(
-			Display* dpy, GLXFBConfig config, GLXContext share_context, Bool direct, const int* attrib_list );
+		Display* dpy, GLXFBConfig config, GLXContext share_context, Bool direct, const int* attrib_list );
 	FUNC_glXCreateContextAttribsARB glXCreateContextAttribsARB =
 		(FUNC_glXCreateContextAttribsARB)glXGetProcAddressARB((const GLubyte*)"glXCreateContextAttribsARB");
 	if( !glXCreateContextAttribsARB ) printf("glXGetProcAddressARB() for \"glXCreateContextAttribsARB\" failed!\n");
@@ -74,7 +98,7 @@ void* glinit(void* arg)
 
 	int context_attribs[] = {
 		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
-		GLX_CONTEXT_MINOR_VERSION_ARB, 0,
+		GLX_CONTEXT_MINOR_VERSION_ARB, 3,
 		GLX_CONTEXT_FLAGS_ARB, 0, //GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
 		GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
 		None
@@ -97,12 +121,14 @@ void* glinit(void* arg)
 
 	// <draw> and <read> are both None and the OpenGL version supported by <ctx> is 3.0 or greater
 	// see, https://www.opengl.org/registry/specs/ARB/glx_create_context.txt
-	if ( !glXMakeContextCurrent( glx_display, glx_pbuffer, glx_pbuffer, glx_context ) )
+	if ( !glXMakeContextCurrent(glx_display, glx_pbuffer, glx_pbuffer, glx_context) )
 		printf("glXMakeContextCurrent() failed!\n");
 	
 	
-	printf("OpenGL Version: %s\n", glGetString(GL_VERSION));
-	printf("OpenGL Vendor: %s\n", glGetString(GL_VENDOR));
+	printf("  GL Version: %s\n", glGetString(GL_VERSION));
+	printf("   GL Vendor: %s\n", glGetString(GL_VENDOR));
+//	printf(" OpenGL Render: %s\n", glGetString(GL_RENDER));
+	printf("GLSL Version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
 	// render to frambuffer object, there is no default osmesa_framebuffer!
 	GLuint frame_buffer_s;
@@ -118,43 +144,84 @@ void* glinit(void* arg)
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
 
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-			GL_RENDERBUFFER, render_buff_rgba);
+		GL_RENDERBUFFER, render_buff_rgba);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-			GL_RENDERBUFFER, render_buff_depth);
+		GL_RENDERBUFFER, render_buff_depth);
 
 	glViewport(0, 0, width, height);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	printf("OpenGL Error: 0x%x\n", glGetError());
+	printf("OpenGL Error (after init): %s\n", glerrors(glGetError()));
 	
 	printf("OpenGL init finished.\n");
 	
 	tex_circle = loadTex("texture/circle.png");
 	tex_site = loadTex("texture/site.png");
 	
+	glXMakeContextCurrent( glx_display, None, None, NULL ); // release context
+
 	return 0;
 }
 
-void glclean()
+void* glclean(void* arg)
 {
 	glXDestroyPbuffer(glx_display, glx_pbuffer);
 	glXDestroyContext(glx_display, glx_context);
 	XCloseDisplay(glx_display);
 }
 
+void* glsetuppipeline(void* arg)
+{
+	if( !glXMakeContextCurrent(glx_display, glx_pbuffer, glx_pbuffer, glx_context) )
+		printf("glXMakeContextCurrent failed in glsetuppipeline().\n");
+
+	//
+
+	glXMakeContextCurrent( glx_display, None, None, NULL ); // release context
+
+	return 0;
+}
+
 void* draw(void* arg)
 {
+	if( !glXMakeContextCurrent(glx_display, glx_pbuffer, glx_pbuffer, glx_context) )
+		printf("glXMakeContextCurrent failed in draw().\n");
+
+	for(int i=0; i<2; ++i){
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+//		glBegin(GL_TRIANGLES);
+//		glColor4f(1,1,0,0.2f);
+//		glVertex3f(0,0,0);
+//		glVertex3f(1,0,0);
+//		glVertex3f(0,1,0);
+//		glEnd();
+
+		glFinish();
+		cv::Mat img(height, width, CV_8UC3);
+		glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, img.data);
+		cv::imshow("result", img);
+		cv::waitKey(0);
+
+		printf("OpenGL Error (after draw): %s\n", glerrors(glGetError()));
+	}
+
+	glXMakeContextCurrent( glx_display, None, None, NULL ); // release context
+
 	return 0;
 }
 
 void* process(void* arg)
 {
 	pthread_t thread;
+	pthread_create(&thread, NULL, glsetuppipeline, NULL);
+	pthread_join(thread, NULL);
+
 	pthread_create(&thread, NULL, draw, NULL);
 	pthread_join(thread, NULL);
-	
+
 	return 0;
 }
 
@@ -164,11 +231,12 @@ int main()
 	
 	pthread_create(&thread, NULL, glinit, NULL);
 	pthread_join(thread, NULL);
-	
+
 	pthread_create(&thread, NULL, process, NULL);
 	pthread_join(thread, NULL);
-	
-	glclean();
+
+	pthread_create(&thread, NULL, glclean, NULL);
+	pthread_join(thread, NULL);
 
 	return 0;
 }
