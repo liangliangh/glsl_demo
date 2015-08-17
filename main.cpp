@@ -8,9 +8,11 @@
 #include "glm/glm.hpp"
 #include "glm/ext.hpp"
 
-#define GL_GLEXT_PROTOTYPES
-#include <GL/gl.h>
-#include <GL/glext.h>
+#define GL_GLEXT_PROTOTYPES // used in <GL/glcorearb.h>
+//#include <GL/gl.h>
+//#include <GL/glext.h>
+#include <GL/glcorearb.h> // use only the core profile
+#define __gl_h_ // do not include <GL/gl.h>
 
 #define GLX_GLXEXT_PROTOTYPES
 #include <GL/glx.h>
@@ -22,7 +24,7 @@ GLXContext glx_context;
 GLXPbuffer glx_pbuffer;
 
 GLuint    tex_circle, tex_site;
-const int width=1280, height=720;
+const int width=640, height=480;
 
 
 const char* glerrors(GLenum code){
@@ -65,8 +67,8 @@ GLuint loadTex(const char* file)
 		}
 	}
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img_rgb.cols, img_rgb.rows, 0, GL_BGRA, GL_UNSIGNED_BYTE, img_rgba.data);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
@@ -147,6 +149,8 @@ void* glinit(void* arg)
 		GL_RENDERBUFFER, render_buff_rgba);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
 		GL_RENDERBUFFER, render_buff_depth);
+
+	glDrawBuffer(GL_COLOR_ATTACHMENT0); // draw index 0: "GL_COLOR_ATTACHMENT0", in fragment shader "layout(location=0)"
 
 	glViewport(0, 0, width, height);
 	glEnable(GL_DEPTH_TEST);
@@ -235,6 +239,7 @@ void printProgramInfoLog(GLuint obj)
 
 
 GLuint verts, frags, prog;
+GLint uni_mat_transformation, uni_model_scale, uni_model_trans, uni_tri_color;
 
 void* glsetuppipeline(void* arg)
 {
@@ -259,6 +264,11 @@ void* glsetuppipeline(void* arg)
 
 	glLinkProgram(prog); printProgramInfoLog(prog);
 	glUseProgram(prog);
+
+	uni_mat_transformation = glGetUniformLocation(prog, "mat_transformation");
+	uni_model_scale = glGetUniformLocation(prog, "model_scale");
+	uni_model_trans = glGetUniformLocation(prog, "model_trans");
+	uni_tri_color = glGetUniformLocation(prog, "tri_color");
 
 	printf("OpenGL Error (after set up pipeline): %s\n", glerrors(glGetError()));
 
@@ -287,6 +297,34 @@ void* draw(void* arg)
 	if( !glXMakeContextCurrent(glx_display, glx_pbuffer, glx_pbuffer, glx_context) )
 		printf("glXMakeContextCurrent failed in draw().\n");
 
+	GLuint vert_pos_buffer, vert_texcoord_buffer;
+	glGenBuffers(1, &vert_pos_buffer);
+	glBindBuffer(GL_ARRAY_BUFFER, vert_pos_buffer);
+	float pos[] = {0.1f,0.1f,0, -0.5f,0.5f,0, -0.5f,-0.5f,0, 0.5f,-0.5f,0, };
+	glBufferData(GL_ARRAY_BUFFER, sizeof(pos), pos, GL_STATIC_DRAW);
+
+	glGenBuffers(1, &vert_texcoord_buffer);
+	glBindBuffer(GL_ARRAY_BUFFER, vert_texcoord_buffer);
+	float texcoor[] = {1,1, 0,1, 0,0, 1,0, };
+	glBufferData(GL_ARRAY_BUFFER, sizeof(texcoor), texcoor, GL_STATIC_DRAW);
+
+	GLuint vao;
+	glGenVertexArrays(1, &vao);
+	glBindVertexArray(vao);
+	glEnableVertexAttribArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, vert_pos_buffer);
+	glVertexAttribPointer(0, 3, GL_FLOAT, 0, 0, 0); // index 0(see the shader code): pos
+
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, vert_texcoord_buffer);
+	glVertexAttribPointer(1, 2, GL_FLOAT, 0, 0, 0); // index 1(see the shader code): tex coord
+
+	GLuint ele_idx_buffer;
+	glGenBuffers(1, &ele_idx_buffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ele_idx_buffer);
+	int index[] = {0,1,2, 2,3,0 };
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index), index, GL_STATIC_DRAW);
+
 	for(int i=0; i<2; ++i){
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -297,13 +335,24 @@ void* draw(void* arg)
 //		glVertex3f(0,1,0);
 //		glEnd();
 
-		glFinish();
-		cv::Mat img(height, width, CV_8UC3);
-		glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, img.data);
-		cv::imshow("result", img);
-		cv::waitKey(0);
+		glUniform4f(uni_tri_color, 1,0,0,0.5f);
+		//glm::mat4 trans = glm::lookAt(glm::vec3(2), glm::vec3(0), glm::vec3(0,1,0));
+		glm::mat4 trans = glm::translate(glm::vec3(0.3f,0.3f, 0));
+		glUniformMatrix4fv(uni_mat_transformation, 1, 0, &trans[0][0]);
+
+		glBindVertexArray(vao);
+		glDrawElements(GL_TRIANGLES, sizeof(index)/sizeof(index[0]), GL_UNSIGNED_INT, NULL);
+//		glDrawArrays(GL_TRIANGLES, 0, 3);
 
 		printf("OpenGL Error (after draw): %s\n", glerrors(glGetError()));
+
+//		glFinish();
+		cv::Mat img(height, width, CV_8UC3);
+		glReadPixels(0, 0, width, height, GL_BGR, GL_UNSIGNED_BYTE, img.data);
+		cv::Mat img2;
+		cv::flip(img, img2, 0);
+		cv::imshow("result", img2);
+		cv::waitKey(0);
 	}
 
 	glXMakeContextCurrent( glx_display, None, None, NULL ); // release context
