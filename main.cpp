@@ -73,8 +73,9 @@ GLuint loadTex(const char* file)
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 //	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE); // not core profile
-
 //	glEnable(GL_TEXTURE_2D);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
 
 	printf("OpenGL Error (after loadtex): %s\n", glerrors(glGetError()));
 
@@ -239,7 +240,7 @@ void printProgramInfoLog(GLuint obj)
 
 
 GLuint verts, frags, prog;
-GLint uni_mat_transformation, uni_model_scale, uni_model_trans, uni_tri_color;
+GLint uni_mat_transformation, uni_model_scale, uni_model_trans, uni_tri_color, uni_tex_cicle;
 
 void* glsetuppipeline(void* arg)
 {
@@ -269,6 +270,7 @@ void* glsetuppipeline(void* arg)
 	uni_model_scale = glGetUniformLocation(prog, "model_scale");
 	uni_model_trans = glGetUniformLocation(prog, "model_trans");
 	uni_tri_color = glGetUniformLocation(prog, "tri_color");
+	uni_tex_cicle = glGetUniformLocation(prog, "tex_cicle");
 
 	printf("OpenGL Error (after set up pipeline): %s\n", glerrors(glGetError()));
 
@@ -300,7 +302,7 @@ void* draw(void* arg)
 	GLuint vert_pos_buffer, vert_texcoord_buffer;
 	glGenBuffers(1, &vert_pos_buffer);
 	glBindBuffer(GL_ARRAY_BUFFER, vert_pos_buffer);
-	float pos[] = {0.1f,0.1f,0, -0.5f,0.5f,0, -0.5f,-0.5f,0, 0.5f,-0.5f,0, };
+	float pos[] = {0.5f,0.5f,0, -0.5f,0.5f,0, -0.5f,-0.5f,0, 0.5f,-0.5f,0, };
 	glBufferData(GL_ARRAY_BUFFER, sizeof(pos), pos, GL_STATIC_DRAW);
 
 	glGenBuffers(1, &vert_texcoord_buffer);
@@ -325,7 +327,7 @@ void* draw(void* arg)
 	int index[] = {0,1,2, 2,3,0 };
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index), index, GL_STATIC_DRAW);
 
-	for(int i=0; i<2; ++i){
+	for(int i=0; i<1; ++i){
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 //		glBegin(GL_TRIANGLES);
@@ -335,9 +337,14 @@ void* draw(void* arg)
 //		glVertex3f(0,1,0);
 //		glEnd();
 
+		glActiveTexture(GL_TEXTURE0 + 1); // binding=1
+		glBindTexture(GL_TEXTURE_2D, tex_circle);
+		glUniform1i(uni_tex_cicle, 1);
+
 		glUniform4f(uni_tri_color, 1,0,0,0.5f);
-		//glm::mat4 trans = glm::lookAt(glm::vec3(2), glm::vec3(0), glm::vec3(0,1,0));
-		glm::mat4 trans = glm::translate(glm::vec3(0.3f,0.3f, 0));
+		glm::mat4 trans = glm::perspective(glm::radians(40.0f), float(width)/height, 1.0f, 1000.0f)
+			* glm::lookAt(glm::vec3(0,-2, 1), glm::vec3(0), glm::vec3(0,1,0));
+//		glm::mat4 trans = glm::translate(glm::vec3(0.0f,0.0f, 0));
 		glUniformMatrix4fv(uni_mat_transformation, 1, 0, &trans[0][0]);
 
 		glBindVertexArray(vao);
