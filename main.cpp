@@ -27,7 +27,7 @@ GLuint    tex_circle, tex_site;
 const int width=640, height=480;
 
 
-const char* glerrors(GLenum code){
+const char* glerrorstring(GLenum code){
 	switch(code){
 		case GL_NO_ERROR:
 			return "GL_NO_ERROR";
@@ -77,14 +77,14 @@ GLuint loadTex(const char* file)
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 
-	printf("OpenGL Error (after loadtex): %s\n", glerrors(glGetError()));
+	printf("OpenGL Error (after loadtex): %s\n", glerrorstring(glGetError()));
 
 	return tex;
 }
 
 void* glinit(void* arg)
 {
-	printf("OpenGL init begin.\n");
+//	printf("OpenGL init begin.\n");
 	typedef GLXContext (*FUNC_glXCreateContextAttribsARB)(
 		Display* dpy, GLXFBConfig config, GLXContext share_context, Bool direct, const int* attrib_list );
 	FUNC_glXCreateContextAttribsARB glXCreateContextAttribsARB =
@@ -158,9 +158,9 @@ void* glinit(void* arg)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	printf("OpenGL Error (after init): %s\n", glerrors(glGetError()));
+	printf("OpenGL Error (after init): %s\n", glerrorstring(glGetError()));
 	
-	printf("OpenGL init finished.\n");
+//	printf("OpenGL init finished.\n");
 	
 	tex_circle = loadTex("texture/circle.png");
 	tex_site = loadTex("texture/site.png");
@@ -272,7 +272,7 @@ void* glsetuppipeline(void* arg)
 	uni_tri_color = glGetUniformLocation(prog, "tri_color");
 	uni_tex_cicle = glGetUniformLocation(prog, "tex_cicle");
 
-	printf("OpenGL Error (after set up pipeline): %s\n", glerrors(glGetError()));
+	printf("OpenGL Error (after set up pipeline): %s\n", glerrorstring(glGetError()));
 
 	glXMakeContextCurrent( glx_display, None, None, NULL ); // release context
 
@@ -351,7 +351,7 @@ void* draw(void* arg)
 		glDrawElements(GL_TRIANGLES, sizeof(index)/sizeof(index[0]), GL_UNSIGNED_INT, NULL);
 //		glDrawArrays(GL_TRIANGLES, 0, 3);
 
-		printf("OpenGL Error (after draw): %s\n", glerrors(glGetError()));
+		printf("OpenGL Error (after draw): %s\n", glerrorstring(glGetError()));
 
 //		glFinish();
 		cv::Mat img(height, width, CV_8UC3);
