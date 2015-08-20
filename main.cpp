@@ -421,7 +421,7 @@ void* draw(void* arg)
 		glUnmapBuffer(GL_TEXTURE_BUFFER);
 		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
 	}
-	
+	glBindBuffer(GL_TEXTURE_BUFFER, 0);
 }
 
 {
@@ -483,7 +483,8 @@ void* draw(void* arg)
 		glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
 		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
 	}
-	
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 }
 
 
