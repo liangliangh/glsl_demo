@@ -338,7 +338,7 @@ void* draw(void* arg)
 
 	for(int i=0; i<sizeof(pixel_rgb); ++i)
 		pixel_rgb[i] = (unsigned char)(i%255);
-	printf("\ndata copy:\n");
+	printf("\n\ndata copy:\n");
 	for(int i=0; i<4; ++i){
 		printf("\n");
 		double t;
@@ -369,7 +369,7 @@ void* draw(void* arg)
 
 	double t = omp_get_wtime();
 	glBufferData(GL_TEXTURE_BUFFER, width*height*sizeof(float), 0, GL_DYNAMIC_DRAW);
-	printf("glBufferData(GL_TEXTURE_BUFFER): %.3f\n", (omp_get_wtime()-t)*1000);
+	printf("\n\nglBufferData(GL_TEXTURE_BUFFER): %.3f\n", (omp_get_wtime()-t)*1000);
 	char bdata[640*480*sizeof(float)] = {'\0'};
 	printf("\nglBufferData():\n");
 	for(int i=0; i<5; ++i){
@@ -428,21 +428,38 @@ void* draw(void* arg)
 	GLuint buffer;
 	glGenTextures(1, &buffer);
 	glBindTexture(GL_TEXTURE_RECTANGLE, buffer);
+	GLuint pupack;
+	glGenBuffers(1, &pupack);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pupack);
+	glBufferData(GL_PIXEL_UNPACK_BUFFER, width*height*sizeof(float), NULL, GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
 	double t = omp_get_wtime();
 	glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-	printf("glTextureImage2D(GL_TEXTURE_RECTANGLE): %.3f\n", (omp_get_wtime()-t)*1000);
+	printf("\n\nglTexImage2D(GL_TEXTURE_RECTANGLE): %.3f\n", (omp_get_wtime()-t)*1000);
 	char bdata[640*480*sizeof(float)] = {'\0'};
-	printf("\nglTextureImage2D():\n");
+	printf("\nglTexImage2D():\n");
 	for(int i=0; i<5; ++i){
 		t = omp_get_wtime();
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 		glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, bdata);
 		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
 	}
 	printf("\nglTexSubImage2D():\n");
 	for(int i=0; i<5; ++i){
 		t = omp_get_wtime();
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 		glTexSubImage2D(GL_TEXTURE_RECTANGLE,0, 0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, bdata);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglTexSubImage2D() map from pixel unpack buffer:\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pupack);
+		char* p = (char*)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY);
+		memcpy(p, bdata, width*height*sizeof(float));
+		glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+		glTexSubImage2D(GL_TEXTURE_RECTANGLE,0, 0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
 	}
 	
