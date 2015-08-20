@@ -100,8 +100,8 @@ void* glinit(void* arg)
 	if(!fbConfigs) printf("glXChooseFBConfig() failed!\n");
 
 	int context_attribs[] = {
-		GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
-		GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+		//GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+		//GLX_CONTEXT_MINOR_VERSION_ARB, 3,
 		GLX_CONTEXT_FLAGS_ARB, 0, //GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
 		GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
 		None
@@ -327,6 +327,128 @@ void* draw(void* arg)
 	int index[] = {0,1,2, 2,3,0 };
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index), index, GL_STATIC_DRAW);
 
+{
+	const int dsize = 640*480*4;
+
+	unsigned char pixel_rgb[dsize];
+	unsigned char pixel_rgb2[dsize];
+
+	float pixel_f[dsize];
+	float pixel_f2[dsize];
+
+	for(int i=0; i<sizeof(pixel_rgb); ++i)
+		pixel_rgb[i] = (unsigned char)(i%255);
+	printf("\ndata copy:\n");
+	for(int i=0; i<4; ++i){
+		printf("\n");
+		double t;
+		t = omp_get_wtime();
+		memcpy(pixel_rgb2, pixel_rgb, sizeof(pixel_rgb));
+		printf("memcpy(): %.3f ms\n", (omp_get_wtime()-t)*100);
+
+		t = omp_get_wtime();
+		for(int i=0; i<sizeof(pixel_rgb); ++i)
+			pixel_rgb2[i] = pixel_rgb[i];
+		printf("for copy: %.3f ms\n", (omp_get_wtime()-t)*100);
+
+		t = omp_get_wtime();
+		for(int i=0; i<dsize; ++i)
+			pixel_f[i] = pixel_rgb[i] / 255.0f;
+		printf("to float: %.3f ms\n", (omp_get_wtime()-t)*100);
+
+		t = omp_get_wtime();
+		for(int i=0; i<dsize; ++i)
+			pixel_rgb[i] = (unsigned char)(pixel_f[i] * 255.0f);
+		printf("to uchar: %.3f ms\n", (omp_get_wtime()-t)*100);
+	}
+}
+{
+	GLuint buffer;
+	glGenBuffers(1, &buffer);
+	glBindBuffer(GL_TEXTURE_BUFFER, buffer);
+
+	double t = omp_get_wtime();
+	glBufferData(GL_TEXTURE_BUFFER, width*height*sizeof(float), 0, GL_DYNAMIC_DRAW);
+	printf("glBufferData(GL_TEXTURE_BUFFER): %.3f\n", (omp_get_wtime()-t)*1000);
+	char bdata[640*480*sizeof(float)] = {'\0'};
+	printf("\nglBufferData():\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		glBufferData(GL_TEXTURE_BUFFER, width*height*sizeof(float), bdata, GL_DYNAMIC_DRAW);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglBufferSubData():\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		glBufferSubData(GL_TEXTURE_BUFFER, 0, width*height*sizeof(float), bdata);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglMapBuffer() write memcpy():\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		void* p = glMapBuffer(GL_TEXTURE_BUFFER, GL_WRITE_ONLY);
+		memcpy(p, bdata, width*height*sizeof(float));
+		glUnmapBuffer(GL_TEXTURE_BUFFER);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglMapBuffer() write for:\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		char* p = (char*)glMapBuffer(GL_TEXTURE_BUFFER, GL_WRITE_ONLY);
+		for(int j=0; j<width*height*sizeof(float); ++j) p[j] = bdata[j];
+		glUnmapBuffer(GL_TEXTURE_BUFFER);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglGetBufferSubData():\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		glGetBufferSubData(GL_TEXTURE_BUFFER, 0, width*height*sizeof(float), bdata);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglMapBuffer() read memcpy():\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		void* p = glMapBuffer(GL_TEXTURE_BUFFER, GL_READ_ONLY);
+		memcpy(bdata, p, width*height*sizeof(float));
+		glUnmapBuffer(GL_TEXTURE_BUFFER);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglMapBuffer() read for:\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		char* p = (char*)glMapBuffer(GL_TEXTURE_BUFFER, GL_READ_ONLY);
+		for(int j=0; j<width*height*sizeof(float); ++j) bdata[j] = p[j];
+		glUnmapBuffer(GL_TEXTURE_BUFFER);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	
+}
+
+{
+	GLuint buffer;
+	glGenTextures(1, &buffer);
+	glBindTexture(GL_TEXTURE_RECTANGLE, buffer);
+
+	double t = omp_get_wtime();
+	glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	printf("glTextureImage2D(GL_TEXTURE_RECTANGLE): %.3f\n", (omp_get_wtime()-t)*1000);
+	char bdata[640*480*sizeof(float)] = {'\0'};
+	printf("\nglTextureImage2D():\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, bdata);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglTexSubImage2D():\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		glTexSubImage2D(GL_TEXTURE_RECTANGLE,0, 0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, bdata);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	
+}
+
+
 	for(int i=0; i<1; ++i){
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -359,7 +481,7 @@ void* draw(void* arg)
 		cv::Mat img2;
 		cv::flip(img, img2, 0);
 		cv::imshow("result", img2);
-		cv::waitKey(0);
+		cv::waitKey(500);
 	}
 
 	glXMakeContextCurrent( glx_display, None, None, NULL ); // release context
