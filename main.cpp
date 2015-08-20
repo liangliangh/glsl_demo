@@ -428,11 +428,15 @@ void* draw(void* arg)
 	GLuint buffer;
 	glGenTextures(1, &buffer);
 	glBindTexture(GL_TEXTURE_RECTANGLE, buffer);
-	GLuint pupack;
+	GLuint pupack, ppack;
 	glGenBuffers(1, &pupack);
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pupack);
 	glBufferData(GL_PIXEL_UNPACK_BUFFER, width*height*sizeof(float), NULL, GL_DYNAMIC_DRAW);
 	glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+	glGenBuffers(1, &ppack);
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, ppack);
+	glBufferData(GL_PIXEL_PACK_BUFFER, width*height*sizeof(float), NULL, GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
 	double t = omp_get_wtime();
 	glTexImage2D(GL_TEXTURE_RECTANGLE, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
@@ -460,6 +464,23 @@ void* draw(void* arg)
 		memcpy(p, bdata, width*height*sizeof(float));
 		glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
 		glTexSubImage2D(GL_TEXTURE_RECTANGLE,0, 0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglGetTexImage():\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+		glGetTexImage(GL_TEXTURE_RECTANGLE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, bdata);
+		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
+	}
+	printf("\nglGetTexImage() map to pixel pack buffer:\n");
+	for(int i=0; i<5; ++i){
+		t = omp_get_wtime();
+		glBindBuffer(GL_PIXEL_PACK_BUFFER, ppack);
+		glGetTexImage(GL_TEXTURE_RECTANGLE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+		char* p = (char*)glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+		memcpy(bdata, p, width*height*sizeof(float));
+		glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
 		printf("time ms: %.3f\n", (omp_get_wtime()-t)*1000);
 	}
 	
